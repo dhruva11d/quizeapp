@@ -13,53 +13,59 @@ class QuizeApp extends StatefulWidget {
   State<QuizeApp> createState() => _QuizeAppState();
 }
 
-class _QuizeAppState extends State<QuizeApp> {
-  int currentQuestionIndex = 0; // Start with the first question
+class _QuizeAppState extends State<QuizeApp> with SingleTickerProviderStateMixin {
+  late AnimationController _questionTextController;
+  late Animation<double> _questionTextAnimation;
+
+  int currentQuestionIndex = 0;
   bool isCorrectAnswerSelected = false;
   bool isIncorrectAnswerSelected = false;
   final List<String> selectedAnswers = [];
   bool quizFinished = false;
 
   void chooseAnswer(String answer) {
-    // Add the selected answer to the list
     selectedAnswers.add(answer);
   }
 
   void answerQuestion(bool isCorrect) {
     setState(() {
       if (isCorrect) {
-        // If the correct answer is selected
         isCorrectAnswerSelected = true;
         isIncorrectAnswerSelected = false;
       } else {
-        // If an incorrect answer is selected
         isCorrectAnswerSelected = false;
         isIncorrectAnswerSelected = true;
       }
     });
 
-    // Delay navigation to the next question for better user experience
     Future.delayed(Duration(seconds: 1), () {
       setState(() {
-        // Move to the next question if there is one
         if (currentQuestionIndex < questions.length - 1) {
           currentQuestionIndex++;
+          _animateQuestionText();
         } else {
-          // Quiz finished, set the flag to navigate directly to the result screen
           quizFinished = true;
         }
 
-        // Reset the flags for correct and incorrect answers
         isCorrectAnswerSelected = false;
         isIncorrectAnswerSelected = false;
       });
 
-      // If all questions are answered, navigate to the result screen
       if (quizFinished) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (BuildContext context) => ResultScreen(selectedAnswers: selectedAnswers),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) {
+              return ResultScreen(selectedAnswers: selectedAnswers);
+            },
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(1.0, 0.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOut;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              var offsetAnimation = animation.drive(tween);
+              return SlideTransition(position: offsetAnimation, child: child);
+            },
           ),
         );
       }
@@ -67,11 +73,34 @@ class _QuizeAppState extends State<QuizeApp> {
   }
 
   @override
+  void initState() {
+    super.initState();
+
+    _questionTextController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 500),
+    );
+
+    _questionTextAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _questionTextController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    _questionTextController.forward();
+  }
+
+  void _animateQuestionText() {
+    _questionTextController.forward(from: 0.0);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentQuestion = questions[currentQuestionIndex];
 
     return Scaffold(
-      appBar: AppBar(title: Text("Quiz"),backgroundColor:Color(0xFF121212),),
+      appBar: AppBar(title: Text("Quiz"), backgroundColor: Color(0xFF121212)),
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -83,21 +112,24 @@ class _QuizeAppState extends State<QuizeApp> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.indigo.withOpacity(0.2),
-                      spreadRadius: 9,
-                      blurRadius: 9,
-                      offset: Offset(16, 7),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  currentQuestion.text,
-                  style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'San Francisco'),
-                  textAlign: TextAlign.center,
+              FadeTransition(
+                opacity: _questionTextAnimation,
+                child: Container(
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.indigo.withOpacity(0.2),
+                        spreadRadius: 9,
+                        blurRadius: 9,
+                        offset: Offset(16, 7),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    currentQuestion.text,
+                    style: TextStyle(color: Colors.black, fontSize: 24, fontFamily: 'San Francisco'),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
               SizedBox(height: 30),
@@ -110,10 +142,7 @@ class _QuizeAppState extends State<QuizeApp> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
                   ),
                   onPressed: () {
-                    // Check if the selected answer is correct
                     bool isCorrect = currentQuestion.isCorrectAnswer(ans);
-
-                    // Handle the selected answer
                     answerQuestion(isCorrect);
                     chooseAnswer(ans);
                   },
@@ -129,9 +158,9 @@ class _QuizeAppState extends State<QuizeApp> {
                   duration: Duration(milliseconds: 500),
                   child: Text(
                     'Correct!',
-                    style: GoogleFonts.agdasima(textStyle: TextStyle(color: Colors.green,fontSize: 20,
-                        fontWeight: FontWeight.bold)),
-
+                    style: GoogleFonts.agdasima(
+                      textStyle: TextStyle(color: Colors.green, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -141,9 +170,9 @@ class _QuizeAppState extends State<QuizeApp> {
                   duration: Duration(milliseconds: 500),
                   child: Text(
                     'Oops you are wrong...',
-                    style: GoogleFonts.agdasima(textStyle: TextStyle(color: Color(0xFF810505),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,)),
+                    style: GoogleFonts.agdasima(
+                      textStyle: TextStyle(color: Color(0xFF810505), fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -162,15 +191,13 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate the score based on the selected answers
     int score = selectedAnswers.where((answer) {
       int questionIndex = selectedAnswers.indexOf(answer);
       return questions[questionIndex].isCorrectAnswer(answer);
     }).length;
 
-
     return Scaffold(
-      appBar: AppBar(title: Text("Quiz Results"),backgroundColor:Color(0xFF121212)),
+      appBar: AppBar(title: Text("Quiz Results"), backgroundColor: Color(0xFF121212)),
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -182,9 +209,9 @@ class ResultScreen extends StatelessWidget {
             height: 400,
             width: 300,
             child: Card(
-              color: Color(0xFFf2f2f2), // Set card color to white
+              color: Color(0xFFf2f2f2),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0), // Set border radius for a square shape
+                borderRadius: BorderRadius.circular(16.0),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -197,14 +224,12 @@ class ResultScreen extends StatelessWidget {
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 20),
-                    // Display the selected answers in a card
                     Expanded(
                       child: ListView.builder(
                         itemCount: selectedAnswers.length,
                         itemBuilder: (BuildContext context, int index) {
                           return ListTile(
                             title: Text('Question ${index + 1}: ${selectedAnswers[index]}'),
-                            // Add additional styling if needed
                           );
                         },
                       ),
